@@ -124,7 +124,11 @@ void lcs::Configuration::LoadFile(const char *fileName) {
             READ_INT(nx)
             READ_INT(ny)
             READ_INT(nz)
+            READ_INT(stencilSize)
             READ_STRING(dataFile)
+
+            if (stencilSize % 2 == 0)
+                lcs::Error("Stencil size is even.");
         }
     }
 

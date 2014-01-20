@@ -1,7 +1,7 @@
 /**********************************************
 File		:	lcsGeometry.cpp
 Author		:	Mingcheng Chen
-Last Update	:	May 20th, 2012
+Last Update	:	January 19th, 2014
 ***********************************************/
 
 #include "lcsGeometry.h"
@@ -21,6 +21,10 @@ int Sign(double a, double epsilon) {
 
 double Sqr(double a) {
 	return a * a;
+}
+
+double Cub(double a) {
+	return a * a * a;
 }
 
 ////////////////////////////////////////////////

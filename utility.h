@@ -31,6 +31,7 @@ private:
     int nx;
     int ny;
     int nz;
+    int stencilSize;
     std::string dataFile;
 
 public:
@@ -66,6 +67,10 @@ public:
 
     int GetNz() const {
         return nz;
+    }
+
+    int GetStencilSize() const {
+        return stencilSize;
     }
 };
 

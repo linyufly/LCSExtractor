@@ -1,7 +1,7 @@
 /**********************************************
-File			:		lcsGeometry.h
-Author			:		Mingcheng Chen
-Last Update		:		July 1st, 2013
+File		:	lcsGeometry.h
+Author		:	Mingcheng Chen
+Last Update	:	January 19th, 2013
 ***********************************************/
 
 #ifndef __LCS_Geometry_H
@@ -19,6 +19,8 @@ namespace lcs {
 int Sign(double a, double epsilon);
 
 double Sqr(double a);
+
+double Cub(double a);
 
 class Vector;
 
