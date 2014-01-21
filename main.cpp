@@ -145,12 +145,12 @@ void GetRawFTLE() {
             }
 
     vtkSmartPointer<vtkImageData> image3D = vtkSmartPointer<vtkImageData>::New();
-    image3D->SetExtent(delta, nx - delta, delta, ny - delta, delta, nz - delta);
+    image3D->SetExtent(0, nx, 0, ny, 0, nz);
     image3D->AllocateScalars(VTK_DOUBLE, 1);
 
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++)
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++)
                 image3D->SetScalarComponentFromDouble(i, j, k, 0, FTLE(i, j, k));
 
     OutputImageData(image3D, nx, ny, nz, "RawFTLEvalues.vtu");
@@ -166,15 +166,15 @@ double GaussianGradientExponent(double n, double sigma) {
     return exp(-lcs::Sqr(n) / (2 * lcs::Sqr(sigma)));
 }
 
-#define _F(i, j, k) F[lcs::Code((i), (j), (k), ny, nz)]
+#define _F(i, j, k) F[lcs::Code((i), (j), (k), ny + delta * 2, nz + delta * 2)]
 #define dxF(i, j, k) dxF[lcs::Code((i), (j), (k), ny, nz)]
 #define dyF(i, j, k) dyF[lcs::Code((i), (j), (k), ny, nz)]
 #define dzF(i, j, k) dzF[lcs::Code((i), (j), (k), ny, nz)]
-#define S1(i, j, k) stage1[lcs::Code((i), (j), (k), ny, nz)]
-#define S2(i, j, k) stage2[lcs::Code((i), (j), (k), ny, nz)]
+#define S1(i, j, k) stage1[lcs::Code((i), (j), (k), ny + delta * 2, nz + delta * 2)]
+#define S2(i, j, k) stage2[lcs::Code((i), (j), (k), ny + delta * 2, nz + delta * 2)]
 
 void GetSmoothedDerivative(double *F, double *dxF, double *dyF, double *dzF, int nx, int ny, int nz, double dx, double dy, double dz, double sigma, int stencilSize) {
-    int length = (nx + 1) * (ny + 1) * (nz + 1);
+    int length = (nx + stencilSize) * (ny + stencilSize) * (nz + stencilSize);
     int delta = stencilSize / 2;
     
     double *stage1 = new double [length];
@@ -190,68 +190,89 @@ void GetSmoothedDerivative(double *F, double *dxF, double *dyF, double *dzF, int
             }
 
     // dxF
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = 0; j <= ny; j++)
-            for (int k = 0; k <= nz; k++) {
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = 0; j <= ny + delta * 2; j++)
+            for (int k = 0; k <= nz + delta * 2; k++) {
                 S1(i, j, k) = 0;
                 for (int di = -delta; di <= delta; di++)
                     S1(i, j, k) += _F(i + di, j, k) * (di * dx) * GaussianGradientCoefficient(sigma) * GaussianGradientExponent(di * dx, sigma);
             }
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = 0; k <= nz; k++) {
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = delta; j <= ny + delta; j++)
+            for (int k = 0; k <= nz + delta * 2; k++) {
                 S2(i, j, k) = 0;
                 for (int dj = -delta; dj <= delta; dj++)
                     S2(i, j, k) += S1(i, j + dj, k) * GaussianGradientExponent(dj * dy, sigma);
             }
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++)
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = delta; j <= ny + delta; j++)
+            for (int k = delta; k <= nz + delta; k++)
                 for (int dk = -delta; dk <= delta; dk++)
-                    dxF(i, j, k) += S2(i, j, k + dk) * GaussianGradientExponent(dk * dz, sigma);
+                    dxF(i - delta, j - delta, k - delta) += S2(i, j, k + dk) * GaussianGradientExponent(dk * dz, sigma);
     // dyF
-    for (int i = 0; i <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = 0; k <= nz; k++) {
+    for (int i = 0; i <= nx + delta * 2; i++)
+        for (int j = delta; j <= ny + delta; j++)
+            for (int k = 0; k <= nz + delta * 2; k++) {
                 S1(i, j, k) = 0;
                 for (int dj = -delta; dj <= delta; dj++)
                     S1(i, j, k) += _F(i, j + dj, k) * (dj * dy) * GaussianGradientCoefficient(sigma) * GaussianGradientExponent(dj * dy, sigma);
             }
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = 0; k <= nz; k++) {
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = delta; j <= ny + delta; j++)
+            for (int k = 0; k <= nz + delta * 2; k++) {
                 S2(i, j, k) = 0;
                 for (int di = -delta; di <= delta; di++)
                     S2(i, j, k) += S1(i + di, j, k) * GaussianGradientExponent(di * dx, sigma);
             }
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++)
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = delta; j <= ny + delta; j++)
+            for (int k = delta; k <= nz + delta; k++)
                 for (int dk = -delta; dk <= delta; dk++)
-                    dyF(i, j, k) += S2(i, j, k + dk) * GaussianGradientExponent(dk * dz, sigma);
+                    dyF(i - delta, j - delta, k - delta) += S2(i, j, k + dk) * GaussianGradientExponent(dk * dz, sigma);
     // dxF
-    for (int i = 0; i <= nx; i++)
-        for (int j = 0; j <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++) {
+    for (int i = 0; i <= nx + delta * 2; i++)
+        for (int j = 0; j <= ny + delta * 2; j++)
+            for (int k = delta; k <= nz + delta; k++) {
                 S1(i, j, k) = 0;
                 for (int dk = -delta; dk <= delta; dk++)
                     S1(i, j, k) += _F(i, j, k + dk) * (dk * dz) * GaussianGradientCoefficient(sigma) * GaussianGradientExponent(dk * dz, sigma);
             }
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = 0; j <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++) {
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = 0; j <= ny + delta * 2; j++)
+            for (int k = delta; k <= nz + delta; k++) {
                 S2(i, j, k) = 0;
                 for (int di = -delta; di <= delta; di++)
                     S2(i, j, k) += S1(i + di, j, k) * GaussianGradientExponent(di * dx, sigma);
             }
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++)
+    for (int i = delta; i <= nx + delta; i++)
+        for (int j = delta; j <= ny + delta; j++)
+            for (int k = delta; k <= nz + delta; k++)
                 for (int dj = -delta; dj <= delta; dj++)
-                    dzF(i, j, k) += S2(i, j + dj, k) * GaussianGradientExponent(dj * dy, sigma);
+                    dzF(i - delta, j - delta, k - delta) += S2(i, j + dj, k) * GaussianGradientExponent(dj * dy, sigma);
 
     delete [] stage1;
     delete [] stage2;
+}
+
+#define V(i, j, k) values[lcs::Code((i), (j), (k), ny + stencilSize - 1, nz + stencilSize - 1)]
+
+int Crop(int lower, int value, int upper) {
+    if (value < lower) return lower;
+    if (value > upper) return upper;
+    return value;
+}
+
+void DataExtension(double *values, int nx, int ny, int nz, int stencilSize) {
+    int delta = stencilSize / 2;
+    // Upper
+    for (int i = 0; i <= nx + delta * 2; i++)
+        for (int j = 0; j <= ny + delta * 2; j++)
+            for (int k = 0; k <= nz + delta * 2; k++) {
+                int _i = Crop(delta, i, nx + delta);
+                int _j = Crop(delta, j, ny + delta);
+                int _k = Crop(delta, k, nz + delta);
+                V(i, j, k) = V(_i, _j, _k);
+            } 
 }
 
 void GetSmoothedFTLE() {
@@ -272,7 +293,7 @@ void GetSmoothedFTLE() {
     ftleValues = new double [length];
     N1 = new lcs::Vector [length];
 
-    double *values = new double [length];
+    double *values = new double [(nx + stencilSize) * (ny + stencilSize) + (nz + stencilSize)];
     double *_dx_x = new double [length];
     double *_dy_x = new double [length];
     double *_dz_x = new double [length];
@@ -283,37 +304,35 @@ void GetSmoothedFTLE() {
     double *_dy_z = new double [length];
     double *_dz_z = new double [length];
 
-    printf("check point 1\n");
+#define INIT_VALUES(dim) \
+    for (int i = 0; i <= nx; i++) \
+        for (int j = 0; j <= ny; j++) \
+            for (int k = 0; k <= nz; k++) \
+                values[lcs::Code(i + delta, j + delta, k + delta, ny + delta * 2, nz + delta * 2)] = P(i, j, k).Get##dim(); \
+    DataExtension(values, nx, ny, nz, stencilSize);
 
     // dx_x, dy_x, dz_x
-    for (int i = 0; i <= nx; i++)
-        for (int j = 0; j <= ny; j++)
-            for (int k = 0; k <= nz; k++)
-                values[lcs::Code(i, j, k, ny, nz)] = P(i, j, k).GetX();
+    INIT_VALUES(X)
     GetSmoothedDerivative(values, _dx_x, _dy_x, _dz_x, nx, ny, nz, dx, dy, dz, sigma, stencilSize);
 
-    printf("check point 2\n");
+    printf("Finished dx_x, dy_x, dz_x.\n");
 
     // dx_y, dy_y, dz_y
-    for (int i = 0; i <= nx; i++)
-        for (int j = 0; j <= ny; j++)
-            for (int k = 0; k <= nz; k++)
-                values[lcs::Code(i, j, k, ny, nz)] = P(i, j, k).GetY();
+    INIT_VALUES(Y)
     GetSmoothedDerivative(values, _dx_y, _dy_y, _dz_y, nx, ny, nz, dx, dy, dz, sigma, stencilSize);
 
-    printf("check point 3\n");
+    printf("Finished dx_y, dy_y, dz_y.\n");
 
     // dx_z, dy_z, dz_z
-    for (int i = 0; i <= nx; i++)
-        for (int j = 0; j <= ny; j++)
-            for (int k = 0; k <= nz; k++)
-                values[lcs::Code(i, j, k, ny, nz)] = P(i, j, k).GetZ();
+    INIT_VALUES(Z)
     GetSmoothedDerivative(values, _dx_z, _dy_z, _dz_z, nx, ny, nz, dx, dy, dz, sigma, stencilSize);
 
+    printf("Finished dx_z, dy_z, dz_z.\n");
+
     // Get FTLE and N1
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++) {
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++) {
                 double dx_x = _dx_x[lcs::Code(i, j, k, ny, nz)];
                 double dy_x = _dy_x[lcs::Code(i, j, k, ny, nz)];
                 double dz_x = _dz_x[lcs::Code(i, j, k, ny, nz)];
@@ -342,12 +361,12 @@ void GetSmoothedFTLE() {
             }
 
     vtkSmartPointer<vtkImageData> image3D = vtkSmartPointer<vtkImageData>::New();
-    image3D->SetExtent(delta, nx - delta, delta, ny - delta, delta, nz - delta);
+    image3D->SetExtent(0, nx, 0, ny, 0, nz);
     image3D->AllocateScalars(VTK_DOUBLE, 1);
 
-    for (int i = delta; i + delta <= nx; i++)
-        for (int j = delta; j + delta <= ny; j++)
-            for (int k = delta; k + delta <= nz; k++)
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++)
                 image3D->SetScalarComponentFromDouble(i, j, k, 0, FTLE(i, j, k));
 
     OutputImageData(image3D, nx, ny, nz, "SmoothedFTLEvalues.vtu");
