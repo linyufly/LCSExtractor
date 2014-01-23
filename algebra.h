@@ -79,7 +79,11 @@ public:
         }
         printf("#END\n");
     }
-
+/*
+    double &Element(int row, int col) const {
+        return MAT(*this, row, col);
+    }
+*/
     static double **CreateVTKMatrix(int numOfRows, int numOfCols) {
         double *arr = new double [numOfRows * numOfCols];
         double **mat = new double * [numOfRows];
@@ -95,10 +99,12 @@ public:
 
     friend Matrix MatrixMatrixMultiplication(const Matrix &a, const Matrix &b);
     friend Matrix MatrixTranspose(const Matrix &a);
+    friend Matrix PCA(const Matrix &a);
 };
 
 Matrix MatrixMatrixMultiplication(const Matrix &a, const Matrix &b);
 Matrix MatrixTranspose(const Matrix &a);
+Matrix PCA(const Matrix &a);
 
 }
 

@@ -1,7 +1,7 @@
 /**********************************************
 File		:	main.cpp
 Author		:	Mingcheng Chen
-Last Update	:	January 14th, 2014
+Last Update	:	January 21st, 2014
 ***********************************************/
 
 #include "lcsGeometry.h"
@@ -18,6 +18,7 @@ Last Update	:	January 14th, 2014
 lcs::Configuration configure;
 lcs::Vector *lastPositions;
 double *ftleValues;
+lcs::Vector *ftleGradients;
 lcs::Vector *N1;
 
 void ReadConfiguration() {
@@ -385,10 +386,86 @@ void GetSmoothedFTLE() {
     printf("Done.\n\n");
 }
 
+void InitializeValues(double *values, double *original, int nx, int ny, int nz, int stencilSize) {
+    int delta = stencilSize / 2;
+
+    printf("delta = %d, stencilSize = %d\n", delta, stencilSize);
+
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++)
+                values[lcs::Code(i + delta, j + delta, k + delta, ny + delta * 2, nz + delta * 2)] = original[lcs::Code(i, j, k, ny, nz)];
+
+    DataExtension(values, nx, ny, nz, stencilSize);
+}
+
+void GetSmoothedFTLEGradient() {
+    printf("Get the smoothed FTLE gradient ...\n");
+
+    int nx = configure.GetNx();
+    int ny = configure.GetNy();
+    int nz = configure.GetNz();
+    int stencilSize = configure.GetStencilSize();
+    int length = (nx + 1) * (ny + 1) * (nz + 1);
+
+    double dx = configure.GetDx();
+    double dy = configure.GetDy();
+    double dz = configure.GetDz();
+    double sigma = configure.GetSigma();
+
+    ftleGradients = new lcs::Vector [length];
+
+    double *values = new double [(nx + stencilSize) * (ny + stencilSize) * (nz + stencilSize)];
+    double *_dx_ftle = new double [length];
+    double *_dy_ftle = new double [length];
+    double *_dz_ftle = new double [length];
+
+    InitializeValues(values, ftleValues, nx, ny, nz, stencilSize);
+    GetSmoothedDerivative(values, _dx_ftle, _dy_ftle, _dz_ftle, nx, ny, nz, dx, dy, dz, sigma, stencilSize);
+
+    for (int i = 0; i < length; i++)
+        ftleGradients[i] = lcs::Vector(_dx_ftle[i], _dy_ftle[i], _dz_ftle[i]);
+
+    vtkSmartPointer<vtkImageData> image3D = vtkSmartPointer<vtkImageData>::New();
+    image3D->SetExtent(0, nx, 0, ny, 0, nz);
+    image3D->AllocateScalars(VTK_DOUBLE, 3);
+
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++) {
+                image3D->SetScalarComponentFromDouble(i, j, k, 0, ftleGradients[lcs::Code(i, j, k, ny, nz)].GetX());
+                image3D->SetScalarComponentFromDouble(i, j, k, 1, ftleGradients[lcs::Code(i, j, k, ny, nz)].GetY());
+                image3D->SetScalarComponentFromDouble(i, j, k, 2, ftleGradients[lcs::Code(i, j, k, ny, nz)].GetZ());
+            }
+
+    OutputImageData(image3D, nx, ny, nz, "SmoothedFTLEGradients.vtu");
+
+    delete [] values;
+    delete [] _dx_ftle;
+    delete [] _dy_ftle;
+    delete [] _dz_ftle;
+
+    printf("Done.\n\n");
+}
+
+void PCATest() {
+    printf("PCA Test ... \n");
+    //double arr[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    //double arr[] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
+    //double arr[] = {3, 3, 3, -1, -1, -1, 2, 2, 2};
+    double arr[] = {1, 2, 3, 4, 8, 12, 0.5, 1, 1.5};
+    lcs::Matrix A(arr, 3, 3);
+    lcs::Matrix B = lcs::PCA(A);
+    B.Output();
+    printf("Done.\n\n");
+}
+
 int main() {
+    PCATest();
     ReadConfiguration();
     ReadLastPositions();
-    GetRawFTLE();
-    GetSmoothedFTLE(); // Totally separate from GetRawFTLE()
+    GetRawFTLE(); // It is just for comparison to smoothed FTLE.
+    GetSmoothedFTLE(); // totally separate from GetRawFTLE()
+    GetSmoothedFTLEGradient();
     return 0;
 }
