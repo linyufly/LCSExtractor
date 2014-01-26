@@ -79,11 +79,11 @@ public:
         }
         printf("#END\n");
     }
-/*
+
     double &Element(int row, int col) const {
         return MAT(*this, row, col);
     }
-*/
+
     static double **CreateVTKMatrix(int numOfRows, int numOfCols) {
         double *arr = new double [numOfRows * numOfCols];
         double **mat = new double * [numOfRows];

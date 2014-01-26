@@ -7,13 +7,26 @@ Last Update	:	January 21st, 2014
 #include "lcsGeometry.h"
 #include "utility.h"
 #include "algebra.h"
-
-#include <cmath>
+#include "marchingCubesTable.h"
 
 #include <vtkMath.h>
 #include <vtkSmartPointer.h>
 #include <vtkImageData.h>
 #include <vtkXMLImageDataWriter.h>
+#include <vtkPoints.h>
+#include <vtkCellArray.h>
+#include <vtkPolyData.h>
+#include <vtkXMLPolyDataWriter.h>
+#include <vtkDoubleArray.h>
+#include <vtkPointData.h>
+#include <vtkStructuredGrid.h>
+#include <vtkXMLStructuredGridWriter.h>
+
+#include <cmath>
+#include <cstdlib>
+#include <cstdio>
+#include <list>
+#include <algorithm>
 
 lcs::Configuration configure;
 lcs::Vector *lastPositions;
@@ -28,7 +41,7 @@ void ReadConfiguration() {
 }
 
 void ReadLastPositions() {
-    printf("Start reading the data file ... \n");
+    printf("Start reading the data file ...\n");
 
     int nx = configure.GetNx();
     int ny = configure.GetNy();
@@ -330,6 +343,8 @@ void GetSmoothedFTLE() {
 
     printf("Finished dx_z, dy_z, dz_z.\n");
 
+    double minFTLE = 1e100, maxFTLE = -1e100;
+
     // Get FTLE and N1
     for (int i = 0; i <= nx; i++)
         for (int j = 0; j <= ny; j++)
@@ -359,8 +374,13 @@ void GetSmoothedFTLE() {
                 N1(i, j, k) = lcs::Vector(eigenvectors[0][0], eigenvectors[1][0], eigenvectors[2][0]);
 
                 lcs::Matrix::DisposeVTKMatrix(eigenvectors);
+
+                minFTLE = std::min(minFTLE, FTLE(i, j, k));
+                maxFTLE = std::max(maxFTLE, FTLE(i, j, k));
             }
 
+    printf("minFTLE = %lf, maxFTLE = %lf\n", minFTLE, maxFTLE);
+/*
     vtkSmartPointer<vtkImageData> image3D = vtkSmartPointer<vtkImageData>::New();
     image3D->SetExtent(0, nx, 0, ny, 0, nz);
     image3D->AllocateScalars(VTK_DOUBLE, 1);
@@ -371,6 +391,25 @@ void GetSmoothedFTLE() {
                 image3D->SetScalarComponentFromDouble(i, j, k, 0, FTLE(i, j, k));
 
     OutputImageData(image3D, nx, ny, nz, "SmoothedFTLEvalues.vtu");
+*/
+
+    vtkSmartPointer<vtkStructuredGrid> grid = vtkSmartPointer<vtkStructuredGrid>::New();
+    vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+    vtkSmartPointer<vtkDoubleArray> data = vtkSmartPointer<vtkDoubleArray>::New();
+    data->SetNumberOfComponents(1);
+    for (int k = 0; k <= nz; k++)
+        for (int j = 0; j <= ny; j++)
+            for (int i = 0; i <= nx; i++) {
+                points->InsertNextPoint(i * dx, j * dy, k * dz);
+                data->InsertNextTuple1(FTLE(i, j, k));
+            }
+    grid->SetDimensions(nx + 1, ny + 1, nz + 1);
+    grid->SetPoints(points);
+    grid->GetPointData()->SetScalars(data);
+    vtkSmartPointer<vtkXMLStructuredGridWriter> writer = vtkSmartPointer<vtkXMLStructuredGridWriter>::New();
+    writer->SetInputData(grid);
+    writer->SetFileName("SmoothedFTLEValue.vtu");
+    writer->Write();
 
     delete [] values;
     delete [] _dx_x;
@@ -449,7 +488,7 @@ void GetSmoothedFTLEGradient() {
 }
 
 void PCATest() {
-    printf("PCA Test ... \n");
+    printf("PCA Test ...\n");
     //double arr[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     //double arr[] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
     //double arr[] = {3, 3, 3, -1, -1, -1, 2, 2, 2};
@@ -460,6 +499,154 @@ void PCATest() {
     printf("Done.\n\n");
 }
 
+struct Triangle {
+    lcs::Vector points[3];
+    double ftleValues[3];
+};
+
+const int vertexList[8][3] = {
+    {0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0},
+    {0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}
+};
+
+const int edgeList[12][2] = {
+    {0, 1}, {1, 2}, {2, 3}, {3, 0},
+    {4, 5}, {5, 6}, {6, 7}, {7, 4},
+    {0, 4}, {1, 5}, {2, 6}, {3, 7}
+};
+
+lcs::Vector EdgeInterpolation(const lcs::Vector &v1, const lcs::Vector &v2, double f1, double f2) {
+    return (v2 * f1 - v1 * f2) / (f1 - f2);
+}
+
+double EdgeInterpolationScalar(double v1, double v2, double f1, double f2) {
+    return (v2 * f1 - v1 * f2) / (f1 - f2);
+}
+
+void ClassifyCube(int a, int b, int c, int ny, int nz, double dx, double dy, double dz, double value[2][2][2], vtkSmartPointer<vtkPoints> surfacePoints, vtkSmartPointer<vtkDoubleArray> pointValues) {
+    lcs::Vector corner(a * dx, b * dy, c * dz);
+
+    lcs::Vector vertices[8];
+    for (int i = 0; i < 8; i++)
+        vertices[i] = corner + lcs::Vector(dx * vertexList[i][0],
+                                           dy * vertexList[i][1],
+                                           dz * vertexList[i][2]);
+
+    double field[8];
+    for (int i = 0; i < 8; i++)
+        field[i] = value[vertexList[i][0]][vertexList[i][1]][vertexList[i][2]];
+
+    int index = 0;
+    for (int i = 0; i < 8; i++)
+        index |= (field[i] < 0) << i;
+
+    lcs::Vector edgeVertices[12];
+    double ftles[12];
+    for (int i = 0; i < 12; i++) {
+        int vtx1 = edgeList[i][0];
+        int vtx2 = edgeList[i][1];
+        edgeVertices[i] = EdgeInterpolation(vertices[vtx1], vertices[vtx2], field[vtx1], field[vtx2]);
+        double ftle1 = FTLE(a + vertexList[vtx1][0], b + vertexList[vtx1][1], c + vertexList[vtx1][2]);
+        double ftle2 = FTLE(a + vertexList[vtx2][0], b + vertexList[vtx2][1], c + vertexList[vtx2][2]);
+        ftles[i] = EdgeInterpolationScalar(ftle1, ftle2, field[vtx1], field[vtx2]);
+    }
+
+    int numOfVertices = numVertsTable[index];
+
+    for (int i = 0; i < numOfVertices; i += 3) {
+        //Triangle triangle;
+        for (int j = 0; j < 3; j++) {
+            int edgeIdx = triTable[index][i + j];
+
+            surfacePoints->InsertNextPoint(edgeVertices[edgeIdx].GetX(),
+                                           edgeVertices[edgeIdx].GetY(),
+                                           edgeVertices[edgeIdx].GetZ());
+            pointValues->InsertNextTuple1(ftles[edgeIdx]);
+            //triangle.points[j] = edgeVertices[edgeIdx];
+            //triangle.ftleValues[j] = ftleValues[edgeIdx];
+        }
+        //triangles.push_back(triangle);
+    }
+}
+
+void SurfaceExtraction() {
+    printf("Extract the surface ...\n");
+
+    int nx = configure.GetNx();
+    int ny = configure.GetNy();
+    int nz = configure.GetNz();
+    int length = (nx + 1) * (ny + 1) * (nz + 1);
+
+    double dx = configure.GetDx();
+    double dy = configure.GetDy();
+    double dz = configure.GetDz();
+
+    double arr[24];
+    double scalar[2][2][2];
+
+    vtkSmartPointer<vtkPoints> surfacePoints = vtkSmartPointer<vtkPoints>::New();
+    vtkSmartPointer<vtkDoubleArray> pointValues = vtkSmartPointer<vtkDoubleArray>::New();
+    pointValues->SetNumberOfComponents(1);
+
+    int tot = 0, blk = 0;
+
+    printf("Check point 1\n");
+
+    for (int i = 0; i < nx; i++)
+        for (int j = 0; j < ny; j++)
+            for (int k = 0; k < nz; k++) {
+                if (++tot % 1000 == 0) printf("tot = %d, blk = %d, blk / tot = %lf, numOfTri = %lf\n", tot, blk, (double)blk / tot, (double)surfacePoints->GetNumberOfPoints() / 3);
+
+                int cnt = 0;
+                for (int di = 0; di <= 1; di++)
+                    for (int dj = 0; dj <= 1; dj++)
+                        for (int dk = 0; dk <= 1; dk++) {
+                            arr[cnt++] = N1(i + di, j + dj, k + dk).GetX();
+                            arr[cnt++] = N1(i + di, j + dj, k + dk).GetY();
+                            arr[cnt++] = N1(i + di, j + dj, k + dk).GetZ();
+                        }
+                lcs::Matrix A(arr, 8, 3);
+                A = lcs::PCA(A);
+                lcs::Vector rule(A.Element(0, 0), A.Element(0, 1), A.Element(0, 2));
+
+                /// DEBUG ///
+                int lower = 0;
+
+                for (int di = 0; di <= 1; di++)
+                    for (int dj = 0; dj <= 1; dj++)
+                        for (int dk = 0; dk <= 1; dk++) {
+                            lcs::Vector e = N1(i + di, j + dj, k + dk);
+                            if (lcs::Dot(e, rule) < 0) e = e * -1;
+                            scalar[di][dj][dk] = lcs::Dot(e, ftleGradients[lcs::Code(i + di, j + dj, k + dk, ny, nz)]);
+                            lower += FTLE(i + di, j + dj, k + dk) < 21.0;
+                        }
+
+                /// primary filtering
+                if (lower < 8) {
+                    ClassifyCube(i, j, k, ny, nz, dx, dy, dz, scalar, surfacePoints, pointValues);
+                    blk++;
+                }
+            }
+
+    vtkSmartPointer<vtkCellArray> cells = vtkSmartPointer<vtkCellArray>::New();
+    for (vtkIdType i = 0; i < surfacePoints->GetNumberOfPoints() / 3; i++) {
+        cells->InsertNextCell(3);
+        cells->InsertCellPoint(i * 3);
+        cells->InsertCellPoint(i * 3 + 1);
+        cells->InsertCellPoint(i * 3 + 2);
+    }
+    vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
+    poly->SetPoints(surfacePoints);
+    poly->SetPolys(cells);
+    poly->GetPointData()->SetScalars(pointValues);
+    vtkSmartPointer<vtkXMLPolyDataWriter> writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+    writer->SetInputData(poly);
+    writer->SetFileName("surface.vtu");
+    writer->Write();
+
+    printf("Done.\n\n");
+}
+
 int main() {
     PCATest();
     ReadConfiguration();
@@ -467,5 +654,6 @@ int main() {
     GetRawFTLE(); // It is just for comparison to smoothed FTLE.
     GetSmoothedFTLE(); // totally separate from GetRawFTLE()
     GetSmoothedFTLEGradient();
+    SurfaceExtraction();
     return 0;
 }
