@@ -12,6 +12,7 @@ Last Update	:	January 14th, 2014
 #include <vtkDoubleArray.h>
 #include <vtkTable.h>
 #include <vtkIndent.h>
+#include <vtkMath.h>
 
 #include <iostream>
 
@@ -37,6 +38,16 @@ lcs::Matrix lcs::MatrixTranspose(const lcs::Matrix &a) {
 }
 
 lcs::Matrix lcs::PCA(const lcs::Matrix &a) {
+    Matrix C = lcs::MatrixMatrixMultiplication(lcs::MatrixTranspose(a), a);
+    double **CForVTK = C.MatrixForVTK();
+    double eigenvalues[3];
+    double **eigenvectors = lcs::Matrix::CreateVTKMatrix(3, 3);
+    vtkMath::Jacobi(CForVTK, eigenvalues, eigenvectors);
+    delete [] CForVTK;
+    lcs::Matrix result(eigenvectors[0], 3, 3);
+    lcs::Matrix::DisposeVTKMatrix(eigenvectors);
+    return result;
+/*
     static char str[100];
 
     vtkSmartPointer<vtkDoubleArray> *data = new vtkSmartPointer<vtkDoubleArray> [a.numOfCols];
@@ -101,4 +112,5 @@ lcs::Matrix lcs::PCA(const lcs::Matrix &a) {
     delete [] evec;
 
     return result;
+*/
 }

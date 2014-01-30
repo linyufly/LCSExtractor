@@ -92,7 +92,7 @@ public:
         return mat;
     }
 
-    static double **DisposeVTKMatrix(double **mat) {
+    static void DisposeVTKMatrix(double **mat) {
         delete [] mat[0];
         delete [] mat;
     }

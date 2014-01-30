@@ -425,6 +425,37 @@ void GetSmoothedFTLE() {
     printf("Done.\n\n");
 }
 
+void GetFakedFTLE() {
+    printf("Get the faked FTLE ...\n");
+
+    int nx = configure.GetNx();
+    int ny = configure.GetNy();
+    int nz = configure.GetNz();
+    int length = (nx + 1) * (ny + 1) * (nz + 1);
+
+    double dx = configure.GetDx();
+    double dy = configure.GetDy();
+    double dz = configure.GetDz();
+
+    ftleValues = new double [length];
+    N1 = new lcs::Vector [length];
+
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++) {
+                double rule = nz / 2 + 0.5;
+                if (k < rule) {
+                    FTLE(i, j, k) = 300 + k - rule;
+                    N1(i, j, k) = lcs::Vector(0, 0, 1);
+                } else {
+                    FTLE(i, j, k) = 300 + rule - k;
+                    N1(i, j, k) = lcs::Vector(0, 0, -1);
+                }
+            }
+
+    printf("Done.\n\n");
+}
+
 void InitializeValues(double *values, double *original, int nx, int ny, int nz, int stencilSize) {
     int delta = stencilSize / 2;
 
@@ -487,13 +518,87 @@ void GetSmoothedFTLEGradient() {
     printf("Done.\n\n");
 }
 
+#define __F(i, j, k) F[lcs::Code((i), (j), (k), ny, nz)]
+
+void GetRawDerivative(double *F, double *dxF, double *dyF, double *dzF, int nx, int ny, int nz, double dx, double dy, double dz) {
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++) {
+                if (!i)
+                    dxF(i, j, k) = (__F(i + 1, j, k) - __F(i, j, k)) / dx;
+                else if (i == nx)
+                    dxF(i, j, k) = (__F(i, j, k) - __F(i - 1, j, k)) / dx;
+                else
+                    dxF(i, j, k) = (__F(i + 1, j, k) - __F(i - 1, j, k)) / (2 * dx);
+                if (!j)
+                    dyF(i, j, k) = (__F(i, j + 1, k) - __F(i, j, k)) / dy;
+                else if (j == ny)
+                    dyF(i, j, k) = (__F(i, j, k) - __F(i, j - 1, k)) / dy;
+                else
+                    dyF(i, j, k) = (__F(i, j + 1, k) - __F(i, j - 1, k)) / (2 * dy);
+                if (!k)
+                    dzF(i, j, k) = (__F(i, j, k + 1) - __F(i, j, k)) / dz;
+                else if (k == nz)
+                    dzF(i, j, k) = (__F(i, j, k) - __F(i, j, k - 1)) / dz;
+                else
+                    dzF(i, j, k) = (__F(i, j, k + 1) - __F(i, j, k - 1)) / ( 2 * dz);
+            }
+}
+
+void GetRawFTLEGradient() {
+    printf("Get the raw FTLE gradient ...\n");
+
+    int nx = configure.GetNx();
+    int ny = configure.GetNy();
+    int nz = configure.GetNz();
+    int length = (nx + 1) * (ny + 1) * (nz + 1);
+
+    double dx = configure.GetDx();
+    double dy = configure.GetDy();
+    double dz = configure.GetDz();
+
+    ftleGradients = new lcs::Vector [length];
+
+    double *_dx_ftle = new double [length];
+    double *_dy_ftle = new double [length];
+    double *_dz_ftle = new double [length];
+
+    GetRawDerivative(ftleValues, _dx_ftle, _dy_ftle, _dz_ftle, nx, ny, nz, dx, dy, dz);
+
+    for (int i = 0; i < length; i++)
+        ftleGradients[i] = lcs::Vector(_dx_ftle[i], _dy_ftle[i], _dz_ftle[i]);
+
+    vtkSmartPointer<vtkImageData> image3D = vtkSmartPointer<vtkImageData>::New();
+    image3D->SetExtent(0, nx, 0, ny, 0, nz);
+    image3D->AllocateScalars(VTK_DOUBLE, 3);
+
+    for (int i = 0; i <= nx; i++)
+        for (int j = 0; j <= ny; j++)
+            for (int k = 0; k <= nz; k++) {
+                image3D->SetScalarComponentFromDouble(i, j, k, 0, ftleGradients[lcs::Code(i, j, k, ny, nz)].GetX());
+                image3D->SetScalarComponentFromDouble(i, j, k, 1, ftleGradients[lcs::Code(i, j, k, ny, nz)].GetY());
+                image3D->SetScalarComponentFromDouble(i, j, k, 2, ftleGradients[lcs::Code(i, j, k, ny, nz)].GetZ());
+            }
+
+    OutputImageData(image3D, nx, ny, nz, "RawFTLEGradients.vtu");
+
+    delete [] _dx_ftle;
+    delete [] _dy_ftle;
+    delete [] _dz_ftle;
+
+    printf("Done.\n\n");
+}
+
 void PCATest() {
     printf("PCA Test ...\n");
     //double arr[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     //double arr[] = {0, 0, 0, 1, 0, 0, 0, 1, 0};
     //double arr[] = {3, 3, 3, -1, -1, -1, 2, 2, 2};
-    double arr[] = {1, 2, 3, 4, 8, 12, 0.5, 1, 1.5};
-    lcs::Matrix A(arr, 3, 3);
+    //double arr[] = {1, 2, 3, 4, 8, 12, 0.5, 1, 1.5};
+    //double arr[] = {0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0};
+    //double arr[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0};
+    double arr[] = {1000, 999, 0, -999, -1000, 0};
+    lcs::Matrix A(arr, 2, 3);
     lcs::Matrix B = lcs::PCA(A);
     B.Output();
     printf("Done.\n\n");
@@ -539,16 +644,27 @@ void ClassifyCube(int a, int b, int c, int ny, int nz, double dx, double dy, dou
     int index = 0;
     for (int i = 0; i < 8; i++)
         index |= (field[i] < 0) << i;
+        //index |= (FTLE(a + vertexList[i][0], b + vertexList[i][1], c + vertexList[i][2]) < 21) << i;
 
     lcs::Vector edgeVertices[12];
+    lcs::Vector edgeVectors[12];
     double ftles[12];
     for (int i = 0; i < 12; i++) {
         int vtx1 = edgeList[i][0];
         int vtx2 = edgeList[i][1];
         edgeVertices[i] = EdgeInterpolation(vertices[vtx1], vertices[vtx2], field[vtx1], field[vtx2]);
-        double ftle1 = FTLE(a + vertexList[vtx1][0], b + vertexList[vtx1][1], c + vertexList[vtx1][2]);
-        double ftle2 = FTLE(a + vertexList[vtx2][0], b + vertexList[vtx2][1], c + vertexList[vtx2][2]);
-        ftles[i] = EdgeInterpolationScalar(ftle1, ftle2, field[vtx1], field[vtx2]);
+        //double ftle1 = FTLE(a + vertexList[vtx1][0], b + vertexList[vtx1][1], c + vertexList[vtx1][2]) - 21;
+        //double ftle2 = FTLE(a + vertexList[vtx2][0], b + vertexList[vtx2][1], c + vertexList[vtx2][2]) - 21;
+        //ftles[i] = EdgeInterpolationScalar(ftle1, ftle2, field[vtx1], field[vtx2]);
+        //edgeVertices[i] = EdgeInterpolation(vertices[vtx1], vertices[vtx2], ftle1, ftle2);
+
+        //lcs::Vector norm1 = N1(a + vertexList[vtx1][0], b + vertexList[vtx1][1], c + vertexList[vtx1][2]);
+        //lcs::Vector norm2 = N1(a + vertexList[vtx2][0], b + vertexList[vtx2][1], c + vertexList[vtx2][2]);
+        lcs::Vector grad1 = ftleGradients[lcs::Code(a + vertexList[vtx1][0], b + vertexList[vtx1][1], c + vertexList[vtx1][2], ny, nz)];
+        lcs::Vector grad2 = ftleGradients[lcs::Code(a + vertexList[vtx2][0], b + vertexList[vtx2][1], c + vertexList[vtx2][2], ny, nz)];
+        //edgeNormals[i] = EdgeInterpolation(grad1, grad2, ftle1, ftle2);
+        //ftles[i] = 21;
+        edgeVectors[i] = EdgeInterpolation(grad1, grad2, field[vtx1], field[vtx2]);
     }
 
     int numOfVertices = numVertsTable[index];
@@ -561,7 +677,8 @@ void ClassifyCube(int a, int b, int c, int ny, int nz, double dx, double dy, dou
             surfacePoints->InsertNextPoint(edgeVertices[edgeIdx].GetX(),
                                            edgeVertices[edgeIdx].GetY(),
                                            edgeVertices[edgeIdx].GetZ());
-            pointValues->InsertNextTuple1(ftles[edgeIdx]);
+            pointValues->InsertNextTuple3(edgeVectors[edgeIdx].GetX(), edgeVectors[edgeIdx].GetY(), edgeVectors[edgeIdx].GetZ());
+            //pointValues->InsertNextTuple1(ftles[edgeIdx]);
             //triangle.points[j] = edgeVertices[edgeIdx];
             //triangle.ftleValues[j] = ftleValues[edgeIdx];
         }
@@ -586,7 +703,8 @@ void SurfaceExtraction() {
 
     vtkSmartPointer<vtkPoints> surfacePoints = vtkSmartPointer<vtkPoints>::New();
     vtkSmartPointer<vtkDoubleArray> pointValues = vtkSmartPointer<vtkDoubleArray>::New();
-    pointValues->SetNumberOfComponents(1);
+    //pointValues->SetNumberOfComponents(1);
+    pointValues->SetNumberOfComponents(3);
 
     int tot = 0, blk = 0;
 
@@ -605,11 +723,19 @@ void SurfaceExtraction() {
                             arr[cnt++] = N1(i + di, j + dj, k + dk).GetY();
                             arr[cnt++] = N1(i + di, j + dj, k + dk).GetZ();
                         }
+/*
+                arr[cnt++] = 0;
+                arr[cnt++] = 0;
+                arr[cnt++] = 0;
+                lcs::Matrix A(arr, 9, 3);
+*/
                 lcs::Matrix A(arr, 8, 3);
                 A = lcs::PCA(A);
-                lcs::Vector rule(A.Element(0, 0), A.Element(0, 1), A.Element(0, 2));
+                //lcs::Vector rule(A.Element(0, 0), A.Element(0, 1), A.Element(0, 2));
+                lcs::Vector rule(A.Element(0, 0), A.Element(1, 0), A.Element(2, 0));
 
                 /// DEBUG ///
+
                 int lower = 0;
 
                 for (int di = 0; di <= 1; di++)
@@ -638,7 +764,9 @@ void SurfaceExtraction() {
     vtkSmartPointer<vtkPolyData> poly = vtkSmartPointer<vtkPolyData>::New();
     poly->SetPoints(surfacePoints);
     poly->SetPolys(cells);
-    poly->GetPointData()->SetScalars(pointValues);
+    //poly->GetPointData()->SetScalars(pointValues);
+    poly->GetPointData()->SetVectors(pointValues);
+
     vtkSmartPointer<vtkXMLPolyDataWriter> writer = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
     writer->SetInputData(poly);
     writer->SetFileName("surface.vtu");
@@ -653,7 +781,9 @@ int main() {
     ReadLastPositions();
     GetRawFTLE(); // It is just for comparison to smoothed FTLE.
     GetSmoothedFTLE(); // totally separate from GetRawFTLE()
+    //GetFakedFTLE();
     GetSmoothedFTLEGradient();
+    //GetRawFTLEGradient();
     SurfaceExtraction();
     return 0;
 }
