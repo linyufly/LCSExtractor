@@ -143,14 +143,42 @@ void GetRawFTLE() {
 
                 double arr[] = {dx_x, dy_x, dz_x, dx_y, dy_y, dz_y, dx_z, dy_z, dz_z};
 
+                /// DEBUG ///
+                if (i == 10 && j == 20 && k == 30) {
+                  printf("f\n");
+                  for (int row = 0; row < 3; row++) {
+                    for (int col = 0; col < 3; col++) {
+                      printf("%lf ", arr[row * 3 + col]);
+                    }
+                    printf("\n");
+                  }
+                }
+
                 lcs::Matrix F(arr, 3, 3);
                 lcs::Matrix C = lcs::MatrixMatrixMultiplication(lcs::MatrixTranspose(F), F);
 
                 double eigenvalues[3];
                 double **eigenvectors = lcs::Matrix::CreateVTKMatrix(3, 3);
                 double **CForVTK = C.MatrixForVTK();
+
+                /// DEBUG ///
+                if (i == 10 && j == 20 && k == 30) {
+                  printf("cc\n");
+                  for (int row = 0; row < 3; row++) {
+                    for (int col = 0; col < 3; col++) {
+                      printf("%lf ", CForVTK[row][col]);
+                    }
+                    printf("\n");
+                  }
+                }
+
                 vtkMath::Jacobi(CForVTK, eigenvalues, eigenvectors);
                 delete [] CForVTK;
+
+                /// DEBUG ///
+                if (i == 10 && j == 20 && k == 30) {
+                  printf("eigenvalue = %lf\n", eigenvalues[0]);
+                }
 
                 FTLE(i, j, k) = log(sqrt(eigenvalues[0]));
                 N1(i, j, k) = lcs::Vector(eigenvectors[0][0], eigenvectors[1][0], eigenvectors[2][0]);
@@ -713,7 +741,18 @@ void SurfaceExtraction() {
     for (int i = 0; i < nx; i++)
         for (int j = 0; j < ny; j++)
             for (int k = 0; k < nz; k++) {
-                if (++tot % 1000 == 0) printf("tot = %d, blk = %d, blk / tot = %lf, numOfTri = %lf\n", tot, blk, (double)blk / tot, (double)surfacePoints->GetNumberOfPoints() / 3);
+                // if (++tot % 1000 == 0) printf("tot = %d, blk = %d, blk / tot = %lf, numOfTri = %lf\n", tot, blk, (double)blk / tot, (double)surfacePoints->GetNumberOfPoints() / 3);
+
+                /// DEBUG ///
+                if (i == 10 && j == 20 && k == 30) {
+                  for (int di = 0; di < 2; di++) {
+                    for (int dj = 0; dj < 2; dj++) {
+                      for (int dk = 0; dk < 2; dk++) {
+                        printf("v: %lf\n", FTLE(i + di, j + dj, k + dk));
+                      }
+                    }
+                  }
+                }
 
                 int cnt = 0;
                 for (int di = 0; di <= 1; di++)
@@ -744,14 +783,24 @@ void SurfaceExtraction() {
                             lcs::Vector e = N1(i + di, j + dj, k + dk);
                             if (lcs::Dot(e, rule) < 0) e = e * -1;
                             scalar[di][dj][dk] = lcs::Dot(e, ftleGradients[lcs::Code(i + di, j + dj, k + dk, ny, nz)]);
+
+                            /// DEBUG ///
+                            if (i == 10 && j == 20 && k == 30) {
+                                printf("e: %lf %lf %lf\n", e.GetX(), e.GetY(), e.GetZ());
+                                lcs::Vector g = ftleGradients[lcs::Code(i + di, j + dj, k + dk, ny, nz)];
+                                printf("g: %lf %lf %lf\n", g.GetX(), g.GetY(), g.GetZ());
+                                printf("scalar: %lf\n", scalar[di][dj][dk]);
+                                printf("\n");
+                            }
+
                             lower += FTLE(i + di, j + dj, k + dk) < 21.0;
                         }
 
                 /// primary filtering
-                if (lower < 8) {
+                // if (lower < 8) {
                     ClassifyCube(i, j, k, ny, nz, dx, dy, dz, scalar, surfacePoints, pointValues);
                     blk++;
-                }
+                // }
             }
 
     vtkSmartPointer<vtkCellArray> cells = vtkSmartPointer<vtkCellArray>::New();
@@ -780,10 +829,10 @@ int main() {
     ReadConfiguration();
     ReadLastPositions();
     GetRawFTLE(); // It is just for comparison to smoothed FTLE.
-    GetSmoothedFTLE(); // totally separate from GetRawFTLE()
+    //GetSmoothedFTLE(); // totally separate from GetRawFTLE()
     //GetFakedFTLE();
-    GetSmoothedFTLEGradient();
-    //GetRawFTLEGradient();
+    //GetSmoothedFTLEGradient();
+    GetRawFTLEGradient();
     SurfaceExtraction();
     return 0;
 }

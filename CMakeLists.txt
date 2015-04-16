@@ -11,14 +11,14 @@ endif()
 
 include_directories(${VTK_INCLUDE_DIRS})
 
-find_package(CUDA)
-if (CUDA_FOUND)
-	include(FindCUDA)
-	set (CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -gencode arch=compute_35,code=sm_35)
-	message("CUDA found")
-else()
-	message("CUDA not found")
-endif()
+#find_package(CUDA)
+#if (CUDA_FOUND)
+#	include(FindCUDA)
+#	set (CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -gencode arch=compute_35,code=sm_35)
+#	message("CUDA found")
+#else()
+#	message("CUDA not found")
+#endif()
 #include(${CUDA_USE_FILE})
 
 #if (VTK_FOUND)
@@ -39,7 +39,7 @@ endif()
 #cuda_compile(lcsRedistributeParticles lcsRedistributeParticles.cu)
 #cuda_compile(lcsTetrahedronBlockIntersection lcsTetrahedronBlockIntersection.cu)
 
-cuda_add_executable(extractor
+add_executable(extractor
 	lcsGeometry.cpp
         utility.cpp
         algebra.cpp
